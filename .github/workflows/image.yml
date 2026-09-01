@@ -19,6 +19,7 @@ jobs:
 
       # Preinstalled on the runner image, so no action dependency.
       - run: shellcheck entrypoint.sh
+      - run: sh entrypoint.sh --self-test
 
       # GHCR rejects uppercase in the image path; GitHub usernames allow it.
       - id: owner

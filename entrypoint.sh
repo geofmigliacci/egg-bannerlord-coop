@@ -28,6 +28,28 @@ die()  { echo "[entrypoint] ERROR: $*" >&2; exit 1; }
 # exit code is not trustworthy - test the result instead.
 ensure_dir() { mkdir -p "$1" 2>/dev/null; [ -d "$1" ] || die "cannot create $1"; }
 
+# server-config.json is JSONC (comments, trailing commas), so values are patched with sed
+# rather than a JSON parser. esc() has to PREFIX the three characters sed would otherwise
+# reinterpret - `&` (the whole match), `\` and `|` (the delimiter) - with a backslash.
+# Substituting them instead, which a bare `\&` in a replacement does, silently rewrote every
+# one of them to "&": a server password of `a|b` was written as `a&b` and nobody could join.
+esc() { printf '%s' "$1" | sed -e 's/[\&|]/\\&/g'; }
+set_cfg() {
+  grep -qE "\"$1\"[[:space:]]*:" "$cfg" 2>/dev/null || return 0
+  sed -i -E "s|(\"$1\"[[:space:]]*:[[:space:]]*)[^,}]*|\1$(esc "$2")|" "$cfg"
+}
+
+# `sh entrypoint.sh --self-test` exercises that round trip with no container and no Steam. CI runs it.
+if [ "${1:-}" = "--self-test" ]; then
+  cfg=$(mktemp) || exit 1
+  printf '{\n  "port": 4200, // trailing comment\n  "password": "old",\n}\n' > "$cfg"
+  set_cfg password '"a|b&c\d"'
+  want='  "password": "a|b&c\d",'
+  got=$(grep password "$cfg"); rm -f "$cfg"
+  [ "$got" = "$want" ] || die "self-test: got [$got] want [$want]"
+  echo "self-test ok"; exit 0
+fi
+
 # --- 1. game files ----------------------------------------------------------
 # steamcmd puts workshop content under its own Steam data root, which is $HOME/Steam - NOT the
 # directory steamcmd.sh lives in. So HOME is pointed at STEAM_DIR when it runs, or the 6 GB lands
@@ -132,17 +154,15 @@ done
 # Written before launch: left alone, the launcher creates it with port 4200 and would bind
 # the wrong port. The file is JSONC (comments, trailing commas) so this is sed, not a parser.
 cfg=$DATA_DIR/server-config.json
-esc() { printf '%s' "$1" | sed -e 's/[\&|]/\&/g'; }
-set_cfg() {
-  grep -qE "\"$1\"[[:space:]]*:" "$cfg" 2>/dev/null || return 0
-  sed -i -E "s|(\"$1\"[[:space:]]*:[[:space:]]*)[^,}]*|\1$(esc "$2")|" "$cfg"
-}
 
-if [ ! -f "$cfg" ] && [ -n "${SERVER_PORT:-}" ]; then
+# SERVER_PORT is always set under Pelican. The fallback is for plain compose, where nothing
+# sets it: the seed used to be skipped entirely there, so the launcher wrote its own config
+# and SERVER_PASSWORD was ignored for that first session - an open server.
+if [ ! -f "$cfg" ]; then
   log "seeding $cfg"
   cat > "$cfg" <<CFG
 {
-  "port": ${SERVER_PORT},
+  "port": ${SERVER_PORT:-4200},
   "saveName": "${SAVE_NAME:-saveauto1}",
   "password": "${SERVER_PASSWORD:-}",
   "autosaveMinutes": ${AUTOSAVE_MINUTES:-5},

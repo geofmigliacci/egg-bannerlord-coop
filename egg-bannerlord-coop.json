@@ -1,5 +1,5 @@
 {
-    "_comment": "Bannerlord Coop dedicated server. The image ships no game files: steamcmd fetches workshop item 3770450698 into the server volume at boot, so each operator downloads their own entitled copy. Requires a Steam account that owns Mount & Blade II: Bannerlord (app 261550) - anonymous workshop downloads are refused for paid apps. Allocate a UDP port.",
+    "_comment": "Bannerlord Coop dedicated server. The image ships no game files: steamcmd fetches workshop item 3770450698 into the server volume at boot, so each operator downloads their own entitled copy. Requires a Steam account that owns Mount & Blade II: Bannerlord (app 261550) - anonymous workshop downloads are refused for paid apps. Allocate two consecutive UDP ports: clients join on the primary and the mod also uses primary+1.",
     "meta": {
         "version": "PTDL_v2",
         "update_url": null
@@ -19,7 +19,7 @@
         "files": "{}",
         "startup": "{\r\n    \"done\": \"coop server up, waiting for clients\"\r\n}",
         "logs": "{}",
-        "stop": "^C"
+        "stop": "stop"
     },
     "scripts": {
         "installation": {
