@@ -35,13 +35,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Pull requests build but never push: an unreviewed image should not become :latest, and a
-      # fork's token cannot write packages anyway. The sha tag is the rollback target - the base
-      # image and winehq-staging are both unpinned, so :latest can shift under you at any rebuild.
+      # PRs build but never push. The sha tag is the rollback target, since nothing is pinned.
       - uses: docker/build-push-action@v6
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
+          # No attestation: it makes :latest an index whose real manifest is an untagged version.
+          provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |

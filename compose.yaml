@@ -1,19 +1,28 @@
 services:
   coop:
     image: ghcr.io/geofmigliacci/bannerlord-coop:latest
+    build: .  # `up --build` uses your working tree instead of the published image
+    # Values come from .env, which compose loads automatically. Defaults match entrypoint.sh.
     environment:
       STEAM_USERNAME: ${STEAM_USERNAME:-}
       STEAM_PASSWORD: ${STEAM_PASSWORD:-}
       AUTO_UPDATE: ${AUTO_UPDATE:-1}  # 0 = never contact Steam, use what is there
+      SAVE_NAME: ${SAVE_NAME:-saveauto1}
+      SERVER_PASSWORD: ${SERVER_PASSWORD:-}
+      AUTOSAVE_MINUTES: ${AUTOSAVE_MINUTES:-5}
     volumes:
       - ./server-data:/server-data  # saves, configs and logs - yours to edit
       - steam:/steam
+      # Prefix is built on first boot (1.6 GB, ~2 min); the volume saves redoing it.
+      - wine:/wine
+    # Clients join on the first, the mod uses the second. Change only the host side (left).
     ports:
       - "4200:4200/udp"
       - "4201:4201/udp"
-    stdin_open: true
+    stdin_open: true  # required: `stop`, `save` and `kick` are read from stdin
     stop_grace_period: 60s
     restart: unless-stopped
 
 volumes:
   steam:
+  wine:
