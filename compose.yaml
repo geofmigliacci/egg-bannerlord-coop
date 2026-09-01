@@ -1,0 +1,19 @@
+services:
+  coop:
+    image: ghcr.io/geofmigliacci/bannerlord-coop:latest
+    environment:
+      STEAM_USERNAME: ${STEAM_USERNAME:-}
+      STEAM_PASSWORD: ${STEAM_PASSWORD:-}
+      AUTO_UPDATE: ${AUTO_UPDATE:-1}  # 0 = never contact Steam, use what is there
+    volumes:
+      - ./server-data:/server-data  # saves, configs and logs - yours to edit
+      - steam:/steam
+    ports:
+      - "4200:4200/udp"
+      - "4201:4201/udp"
+    stdin_open: true
+    stop_grace_period: 60s
+    restart: unless-stopped
+
+volumes:
+  steam:

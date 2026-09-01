@@ -1,0 +1,123 @@
+{
+    "_comment": "Bannerlord Coop dedicated server. The image ships no game files: steamcmd fetches workshop item 3770450698 into the server volume at boot, so each operator downloads their own entitled copy. Requires a Steam account that owns Mount & Blade II: Bannerlord (app 261550) - anonymous workshop downloads are refused for paid apps. Allocate a UDP port.",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-09-01T00:00:00+00:00",
+    "name": "Bannerlord Coop",
+    "author": "geoffrey.migliacci@gmail.com",
+    "description": "Mount & Blade II: Bannerlord cooperative campaign server, running the Windows dedicated server build under Wine. Saves, configs and dated backups live in the server volume.",
+    "features": null,
+    "docker_images": {
+        "Bannerlord Coop (Wine)": "ghcr.io/geofmigliacci/bannerlord-coop:latest",
+        "Local build, no pull": "~bannerlord-coop:latest"
+    },
+    "file_denylist": [],
+    "startup": "/usr/local/bin/entrypoint.sh",
+    "config": {
+        "files": "{}",
+        "startup": "{\r\n    \"done\": \"coop server up, waiting for clients\"\r\n}",
+        "logs": "{}",
+        "stop": "stop"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\n# The game files are downloaded by the container at boot, not here: the workshop item\n# needs a Steam login, and install containers cannot answer a Steam Guard prompt.\n# This only lays out the directories the entrypoint expects.\nmkdir -p /mnt/server/data /mnt/server/.steamcmd\necho \"Directories ready.\"\necho \"On first start, set STEAM_USERNAME (and leave STEAM_PASSWORD empty) and use the\"\necho \"console to answer the Steam Guard prompt. The first download is about 6 GB.\"\n",
+            "container": "ghcr.io/parkervcp/installers:debian",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Steam username",
+            "description": "A Steam account that owns Mount & Blade II: Bannerlord. Required - the workshop item cannot be downloaded anonymously.",
+            "env_variable": "STEAM_USERNAME",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "Steam password",
+            "description": "Set this and start the server, then approve the login on your phone when Steam prompts you (accounts on emailed codes get a code prompt in the console instead). steamcmd caches a refresh token in the server volume afterwards, good for months, so later starts are unattended. Left empty, the password is prompted for in the console too.",
+            "env_variable": "STEAM_PASSWORD",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": true,
+            "rules": "nullable|string|max:128",
+            "field_type": "text"
+        },
+        {
+            "name": "Auto update",
+            "description": "Check Steam for a newer build of the mod on every start. 0 skips Steam entirely and uses the files already present.",
+            "env_variable": "AUTO_UPDATE",
+            "default_value": "1",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "Save name",
+            "description": "World to host, from Game Saves in the data directory. A missing save is created from default_new_game.sav.",
+            "env_variable": "SAVE_NAME",
+            "default_value": "saveauto1",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|alpha_dash|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "Server password",
+            "description": "Password joining players are prompted for. Empty means open.",
+            "env_variable": "SERVER_PASSWORD",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:128",
+            "field_type": "text"
+        },
+        {
+            "name": "Autosave minutes",
+            "description": "Minutes between world autosaves. 0 disables autosaving.",
+            "env_variable": "AUTOSAVE_MINUTES",
+            "default_value": "5",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|between:0,240",
+            "field_type": "text"
+        },
+        {
+            "name": "Data directory",
+            "description": "Where saves, configs, logs and backups live. Internal.",
+            "env_variable": "DATA_DIR",
+            "default_value": "/home/container/data",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|string|max:128",
+            "field_type": "text"
+        },
+        {
+            "name": "Steam directory",
+            "description": "Holds steamcmd, its Guard sentry and the downloaded game files. Must persist. Internal.",
+            "env_variable": "STEAM_DIR",
+            "default_value": "/home/container/.steamcmd",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|string|max:128",
+            "field_type": "text"
+        },
+        {
+            "name": "Wine prefix",
+            "description": "Created on first boot inside the volume, since the container does not run as root. Internal.",
+            "env_variable": "WINEPREFIX",
+            "default_value": "/home/container/.wine",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|string|max:128",
+            "field_type": "text"
+        }
+    ]
+}
