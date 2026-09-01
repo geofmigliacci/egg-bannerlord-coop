@@ -19,7 +19,7 @@
         "files": "{}",
         "startup": "{\r\n    \"done\": \"coop server up, waiting for clients\"\r\n}",
         "logs": "{}",
-        "stop": "stop"
+        "stop": "^C"
     },
     "scripts": {
         "installation": {

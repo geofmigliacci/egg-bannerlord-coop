@@ -1,4 +1,5 @@
 FROM debian:bookworm-slim
+LABEL org.opencontainers.image.source=https://github.com/geofmigliacci/egg-bannerlord-coop
 
 # WineHQ staging + Xvfb, plus the 32-bit runtime steamcmd needs. The i386 architecture is
 # required by the winehq packages anyway, so steamcmd's deps are nearly free here.
@@ -23,6 +24,10 @@ RUN xvfb-run -a wineboot -i && wineserver -k; test -f /wine/system.reg
 
 # No game files are baked in: steamcmd fetches them at boot into a persistent volume.
 COPY entrypoint.sh /usr/local/bin/
+# The exec bit is set here rather than inherited from the build context: git on Windows
+# stores the script 0644, so a CI checkout produces a non-executable file and the container
+# dies with "permission denied" before the entrypoint ever runs.
+RUN chmod 755 /usr/local/bin/entrypoint.sh
 
 EXPOSE 4200/udp 4201/udp
 
