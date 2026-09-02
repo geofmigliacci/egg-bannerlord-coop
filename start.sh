@@ -5,31 +5,41 @@ set -u
 APP_ID=261550
 ITEM_ID=3770450698
 
-STEAM_DIR=${STEAM_DIR:-/steam}
+STEAM_DIR=${STEAM_DIR:-/home/container/.steamcmd}
 # Run straight out of the steamcmd download; left empty, the path is discovered below.
 GAME_DIR=${GAME_DIR:-}
-DATA_DIR=${DATA_DIR:-/server-data}
-WINEPREFIX=${WINEPREFIX:-/wine}
+DATA_DIR=${DATA_DIR:-/home/container/data}
+WINEPREFIX=${WINEPREFIX:-/home/container/.wine}
 AUTO_UPDATE=${AUTO_UPDATE:-1}
-STEAM_GUARD_CODE=${STEAM_GUARD_CODE:-}
 export WINEPREFIX
 
-log()  { echo "[entrypoint] $*"; }
-warn() { echo "[entrypoint] WARNING: $*" >&2; }
-die()  { echo "[entrypoint] ERROR: $*" >&2; exit 1; }
+log()  { echo "[coop] $*"; }
+warn() { echo "[coop] WARNING: $*" >&2; }
+die()  { echo "[coop] ERROR: $*" >&2; exit 1; }
 
 # Docker Desktop's 9p mount can return EEXIST for a missing dir, so test the result.
 ensure_dir() { mkdir -p "$1" 2>/dev/null; [ -d "$1" ] || die "cannot create $1"; }
 
-# server-config.json is JSONC, so values are patched with sed, not a parser. esc() must
-# PREFIX & \ | with a backslash; substituting them turned a password a|b into a&b.
+# server-config.json is JSONC, so sed, not a parser. esc() prefixes & \ | for sed.
 esc() { printf '%s' "$1" | sed -e 's/[\&|]/\\&/g'; }
 set_cfg() {
   grep -qE "\"$1\"[[:space:]]*:" "$cfg" 2>/dev/null || return 0
   sed -i -E "s|(\"$1\"[[:space:]]*:[[:space:]]*)[^,}]*|\1$(esc "$2")|" "$cfg"
 }
 
-# `sh entrypoint.sh --self-test` checks that round trip. CI runs it.
+# wings sends its primary allocation here, and 0 when the server has none. The
+# launcher FATALs on a bad port, so check before downloading 6 GB to find out.
+check_port() {
+  case ${1:-} in
+    ''|*[!0-9]*) die "SERVER_PORT=${1:-} is not a number" ;;
+  esac
+  # The mod also uses port+1, so 65535 is out of range too.
+  [ "$1" -ge 1 ] && [ "$1" -le 65534 ] || die "SERVER_PORT=$1 is not in 1-65534.
+Pelican sends 0 when the server has no primary allocation: give the server two
+consecutive free UDP ports."
+}
+
+# `sh start.sh --self-test` checks both round trips. CI runs it.
 if [ "${1:-}" = "--self-test" ]; then
   cfg=$(mktemp) || exit 1
   printf '{\n  "port": 4200, // trailing comment\n  "password": "old",\n}\n' > "$cfg"
@@ -37,8 +47,14 @@ if [ "${1:-}" = "--self-test" ]; then
   want='  "password": "a|b&c\d",'
   got=$(grep password "$cfg"); rm -f "$cfg"
   [ "$got" = "$want" ] || die "self-test: got [$got] want [$want]"
+  ( check_port 0 )     2>/dev/null && die "self-test: check_port took 0"
+  ( check_port 65535 ) 2>/dev/null && die "self-test: check_port took 65535"
+  ( check_port abc )   2>/dev/null && die "self-test: check_port took abc"
+  check_port 4200 || die "self-test: check_port rejected 4200"
   echo "self-test ok"; exit 0
 fi
+
+[ -z "${SERVER_PORT:-}" ] || check_port "$SERVER_PORT"
 
 # --- 1. game files ----------------------------------------------------------
 # steamcmd puts content under $HOME/Steam, so HOME points at STEAM_DIR; roots vary, hence the list.
@@ -55,7 +71,6 @@ resolve_game_dir() {
   return 1
 }
 
-# Login args are passed in; the cached-token path and the password path differ only there.
 run_steamcmd() {
   HOME=$STEAM_DIR "$STEAM_DIR/steamcmd.sh" "$@" \
       +workshop_download_item "$APP_ID" "$ITEM_ID" +quit
@@ -86,15 +101,10 @@ update_game() {
     run_steamcmd +@NoPromptForPassword 1 +login "$STEAM_USERNAME" && return 0
     log "steamcmd: cached token rejected, using password"
   fi
-  # STEAM_GUARD_CODE is the third positional arg, useless with a mobile authenticator.
+  # An empty password means steamcmd prompts for it, and for the Guard code, on the console.
   # shellcheck disable=SC2086
-  if ! run_steamcmd +login "$STEAM_USERNAME" ${STEAM_PASSWORD:+"$STEAM_PASSWORD"} ${STEAM_GUARD_CODE:+"$STEAM_GUARD_CODE"}; then
-    # Guard codes expire in ~30s, so fall back to a console prompt instead of failing.
-    [ -n "$STEAM_GUARD_CODE" ] || { warn "steamcmd failed"; return 1; }
-    warn "login with STEAM_GUARD_CODE failed - codes expire in ~30s. Retrying with a"
-    warn "console prompt: type the password and a fresh code into the console."
-    run_steamcmd +login "$STEAM_USERNAME" || { warn "steamcmd failed"; return 1; }
-  fi
+  run_steamcmd +login "$STEAM_USERNAME" ${STEAM_PASSWORD:+"$STEAM_PASSWORD"} ||
+    { warn "steamcmd failed"; return 1; }
 }
 
 if ! update_game; then
@@ -113,7 +123,6 @@ log "game files: $GAME_DIR"
 ensure_dir "$DATA_DIR"
 
 # --- 2. wine prefix ---------------------------------------------------------
-# Built at runtime: the image ships no prefix.
 if [ ! -f "$WINEPREFIX/system.reg" ]; then
   log "creating wine prefix at $WINEPREFIX (~2 min)"
   ensure_dir "$WINEPREFIX"
@@ -136,7 +145,6 @@ done
 # Seeded before launch, or the launcher writes its own with port 4200.
 cfg=$DATA_DIR/server-config.json
 
-# SERVER_PORT is always set under Pelican; the fallback is for plain compose.
 if [ ! -f "$cfg" ]; then
   log "seeding $cfg"
   cat > "$cfg" <<CFG
@@ -162,6 +170,10 @@ win_data=$(winepath -w "$DATA_DIR" 2>/dev/null)
 log "starting: $GAME_DIR  ->  --data-dir $win_data"
 cd "$GAME_DIR" || die "cannot enter $GAME_DIR"
 
-# No `exec`: making xvfb-run PID 1 makes wine exit instantly.
+# The launcher only submits a command line on CR, and wings sends LF. Needs a tty,
+# which wings always allocates and compose.yaml sets.
+stty inlcr 2>/dev/null || true
+
+# Xvfb is already on $DISPLAY. exec puts wine one hop from wings' stdin and signals.
 # --no-tui: on wings' tty the launcher truncates the ready line wings matches.
-xvfb-run -a wine BannerlordCoopServer.exe --no-tui --data-dir "$win_data"
+exec wine BannerlordCoopServer.exe --no-tui --data-dir "$win_data" "$@"

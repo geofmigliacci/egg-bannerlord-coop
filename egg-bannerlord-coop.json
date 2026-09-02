@@ -7,14 +7,18 @@
     "exported_at": "2026-09-01T00:00:00+00:00",
     "name": "Bannerlord Coop",
     "author": "geoffrey.migliacci@gmail.com",
+    "uuid": "6fe19f57-f7cc-4f53-a9f0-7b0268d8fa7e",
     "description": "Mount & Blade II: Bannerlord cooperative campaign server, running the Windows dedicated server build under Wine. Saves, configs and dated backups live in the server volume.",
+    "tags": [
+        "steamcmd"
+    ],
     "features": null,
     "docker_images": {
         "Bannerlord Coop (Wine)": "ghcr.io/geofmigliacci/bannerlord-coop:latest",
         "Local build, no pull": "~bannerlord-coop:latest"
     },
     "file_denylist": [],
-    "startup": "/usr/local/bin/entrypoint.sh",
+    "startup": "/usr/local/bin/start.sh",
     "config": {
         "files": "{}",
         "startup": "{\r\n    \"done\": \"coop server up, waiting for clients\"\r\n}",
@@ -23,7 +27,7 @@
     },
     "scripts": {
         "installation": {
-            "script": "#!/bin/bash\n# The game files are downloaded by the container at boot, not here: the workshop item\n# needs a Steam login, and install containers cannot answer a Steam Guard prompt.\n# This only lays out the directories the entrypoint expects.\nmkdir -p /mnt/server/data /mnt/server/.steamcmd\necho \"Directories ready.\"\necho \"On first start, set STEAM_USERNAME (and leave STEAM_PASSWORD empty) and use the\"\necho \"console to answer the Steam Guard prompt. The first download is about 6 GB.\"\n",
+            "script": "#!/bin/bash\n# The game files are downloaded by the container at boot, not here: the workshop item\n# needs a Steam login, and install containers cannot answer a Steam Guard prompt.\n# This only lays out the directories start.sh expects.\nmkdir -p /mnt/server/data /mnt/server/.steamcmd\necho \"Directories ready.\"\necho \"On first start, set STEAM_USERNAME (and leave STEAM_PASSWORD empty) and use the\"\necho \"console to answer the Steam Guard prompt. The first download is about 6 GB.\"\n",
             "container": "ghcr.io/parkervcp/installers:debian",
             "entrypoint": "bash"
         }

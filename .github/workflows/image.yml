@@ -3,9 +3,9 @@ name: image
 on:
   push:
     branches: [main]
-    paths: ['Dockerfile', 'entrypoint.sh', '.github/workflows/image.yml']
+    paths: ['Dockerfile', 'start.sh', '.github/workflows/image.yml']
   pull_request:
-    paths: ['Dockerfile', 'entrypoint.sh', '.github/workflows/image.yml']
+    paths: ['Dockerfile', 'start.sh', '.github/workflows/image.yml']
   workflow_dispatch:
 
 jobs:
@@ -18,8 +18,8 @@ jobs:
       - uses: actions/checkout@v4
 
       # Preinstalled on the runner image, so no action dependency.
-      - run: shellcheck entrypoint.sh
-      - run: sh entrypoint.sh --self-test
+      - run: shellcheck start.sh
+      - run: sh start.sh --self-test
 
       # GHCR rejects uppercase in the image path; GitHub usernames allow it.
       - id: owner
@@ -39,6 +39,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: linux/amd64  # the Dockerfile is amd64 only, don't leave it to the runner
           push: ${{ github.event_name != 'pull_request' }}
           # No attestation: it makes :latest an index whose real manifest is an untagged version.
           provenance: false
