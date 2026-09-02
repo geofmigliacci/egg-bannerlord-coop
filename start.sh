@@ -30,13 +30,12 @@ set_cfg() {
 # wings sends its primary allocation here, and 0 when the server has none. The
 # launcher FATALs on a bad port, so check before downloading 6 GB to find out.
 check_port() {
-  case ${1:-} in
-    ''|*[!0-9]*) die "SERVER_PORT=${1:-} is not a number" ;;
-  esac
-  # The mod also uses port+1, so 65535 is out of range too.
-  [ "$1" -ge 1 ] && [ "$1" -le 65534 ] || die "SERVER_PORT=$1 is not in 1-65534.
-Pelican sends 0 when the server has no primary allocation: give the server two
-consecutive free UDP ports."
+  # 1-65534, since the mod also uses port+1. awk compares without overflowing on a
+  # long digit string, and [1-9] first means no leading zero and no need for a
+  # lower-bound test.
+  awk -v p="${1:-}" 'BEGIN{exit !(p ~ /^[1-9][0-9]*$/ && p+0<=65534)}' ||
+    die "SERVER_PORT=${1:-} is not a port in 1-65534. Pelican sends 0 when the
+server has no primary allocation: give it two consecutive free UDP ports."
 }
 
 # `sh start.sh --self-test` checks both round trips. CI runs it.
@@ -47,9 +46,9 @@ if [ "${1:-}" = "--self-test" ]; then
   want='  "password": "a|b&c\d",'
   got=$(grep password "$cfg"); rm -f "$cfg"
   [ "$got" = "$want" ] || die "self-test: got [$got] want [$want]"
-  ( check_port 0 )     2>/dev/null && die "self-test: check_port took 0"
-  ( check_port 65535 ) 2>/dev/null && die "self-test: check_port took 65535"
-  ( check_port abc )   2>/dev/null && die "self-test: check_port took abc"
+  for bad in "" 0 abc 04200 65535 99999999999999999999; do
+    ( check_port "$bad" ) 2>/dev/null && die "self-test: check_port took [$bad]"
+  done
   check_port 4200 || die "self-test: check_port rejected 4200"
   echo "self-test ok"; exit 0
 fi
